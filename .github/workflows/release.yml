@@ -1,0 +1,63 @@
+name: Release Package
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'CODE_OF_CONDUCT.md'
+      - 'SECURITY.md'
+      - 'LICENSE'
+      - 'LICENSE.md'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build package and SHA-256 checksum
+        run: |
+          mkdir -p dist
+          PKG_FILE=$(npm pack --pack-destination dist | tail -n 1)
+          cd dist
+          sha256sum "$PKG_FILE" > "${PKG_FILE}.sha256"
+
+      - name: Extract version from package.json and notes from CHANGELOG.md
+        id: meta
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          node -e '
+            const fs = require("fs");
+            const v = process.argv[1].replace(/\./g, "\\.");
+            const log = fs.readFileSync("CHANGELOG.md", "utf8");
+            const m = log.match(new RegExp(`## \\[${v}\\][^\\n]*\\n([\\s\\S]*?)(?=\\n## \\[|$)`));
+            fs.writeFileSync("release_notes.md", (m ? m[1].trim() : `Release v${process.argv[1]}`) + "\n");
+          ' "$VERSION"
+          cat release_notes.md
+
+      - name: Run composite release action
+        uses: ./.github/actions/create-release
+        with:
+          tag_name: v${{ steps.meta.outputs.version }}
+          release_name: Release v${{ steps.meta.outputs.version }}
+          notes_file: release_notes.md
+          files: dist/*
+          github_token: ${{ secrets.GITHUB_TOKEN }}

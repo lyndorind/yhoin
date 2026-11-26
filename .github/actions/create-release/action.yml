@@ -1,0 +1,40 @@
+name: 'Create Tag and GitHub Release'
+description: 'Створює анотований тег у репозиторії та публікує реліз з артефактами'
+
+inputs:
+  tag_name:
+    description: 'Назва тегу (наприклад, v1.1.0)'
+    required: true
+  release_name:
+    description: 'Заголовок релізу'
+    required: true
+  notes_file:
+    description: 'Шлях до файлу з описом релізу'
+    required: true
+  files:
+    description: 'Шлях або маска файлів для прикріплення в Assets'
+    required: false
+    default: ''
+  github_token:
+    description: 'Токен доступу GitHub'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Create and push annotated Git tag
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git tag -a "${{ inputs.tag_name }}" -m "${{ inputs.release_name }}"
+        git push origin "${{ inputs.tag_name }}"
+
+    - name: Create GitHub Release and upload assets
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        gh release create "${{ inputs.tag_name }}" ${{ inputs.files }} \
+          --title "${{ inputs.release_name }}" \
+          --notes-file "${{ inputs.notes_file }}"
